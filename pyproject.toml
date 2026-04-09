@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "twins-livekit"
+version = "0.1.0"
+description = "LiveKit proxy twin for twins.la"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = [
+    "flask>=3.0,<4.0",
+    "requests>=2.31,<3.0",
+    "flask-sock>=0.7,<1.0",
+    "websocket-client>=1.7,<2.0",
+    "livekit-api>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "responses>=0.25",
+]
+
+[tool.setuptools.packages.find]
+include = ["twins_livekit*"]
