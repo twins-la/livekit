@@ -95,6 +95,30 @@ def settings():
     })
 
 
+@twin_plane_bp.route("/references", methods=["GET"])
+def references():
+    """Return the authoritative sources used to build this twin."""
+    return jsonify({
+        "references": [
+            {
+                "title": "LiveKit Server APIs (RoomService, Egress)",
+                "url": "https://docs.livekit.io/home/server/api-reference/",
+                "retrieved": "2026-04-07",
+            },
+            {
+                "title": "LiveKit Webhooks",
+                "url": "https://docs.livekit.io/home/server/webhooks/",
+                "retrieved": "2026-04-07",
+            },
+            {
+                "title": "LiveKit Server SDK (Go)",
+                "url": "https://github.com/livekit/livekit",
+                "retrieved": "2026-04-07",
+            },
+        ],
+    })
+
+
 # -- Account management (contract compliance, single dev account) --
 
 

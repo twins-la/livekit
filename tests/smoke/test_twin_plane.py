@@ -34,6 +34,21 @@ class TestSettings:
         assert "upstream_url" in data
 
 
+class TestReferences:
+    def test_references_returns_sources(self, client):
+        resp = client.get("/_twin/references")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        refs = data["references"]
+        assert len(refs) >= 1
+        for ref in refs:
+            assert "title" in ref
+            assert "url" in ref
+            assert "retrieved" in ref
+        titles = [r["title"] for r in refs]
+        assert any("LiveKit" in t for t in titles)
+
+
 class TestAccounts:
     def test_create_account_returns_dev(self, client):
         resp = client.post("/_twin/accounts")

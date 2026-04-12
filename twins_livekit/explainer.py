@@ -35,6 +35,7 @@ Management API for test control:
 - GET /_twin/health — status, upstream connectivity
 - GET /_twin/scenarios — supported test scenarios
 - GET /_twin/settings — current configuration
+- GET /_twin/references — authoritative sources used to build this twin
 
 ### State Inspection
 - GET /_twin/rooms — list rooms tracked by the twin
