@@ -22,7 +22,12 @@ from ..models import (
 )
 from ..webhooks import simulate_webhook
 from .auth import require_tenant, require_tenant_or_admin, require_admin
-from twins_local.tenants import generate_tenant_id, generate_tenant_secret, hash_secret
+from twins_local.tenants import (
+    generate_tenant_id,
+    generate_tenant_secret,
+    hash_secret,
+    reject_default_in_cloud,
+)
 
 twin_plane_bp = Blueprint("twin_plane", __name__, url_prefix="/_twin")
 
@@ -147,6 +152,10 @@ def create_tenant():
     friendly_name = request.json.get("friendly_name", "") if request.is_json else ""
 
     tenant_id = generate_tenant_id()
+    if g.get("is_cloud"):
+        # UUIDv4 cannot collide with the reserved "default" id, but guard
+        # defensively per PRINCIPLES.md §7.
+        reject_default_in_cloud(tenant_id)
     tenant_secret = generate_tenant_secret()
     tenant = g.tenants.create_tenant(
         tenant_id=tenant_id,
