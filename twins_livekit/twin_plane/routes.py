@@ -1,7 +1,8 @@
 """Twin Plane management endpoints for the LiveKit proxy twin.
 
 Provides: health, scenarios, settings, state inspection,
-webhook inspection/simulation, fault injection, logs, reset.
+webhook inspection/simulation, fault injection, logs, reset,
+and tenant bootstrap.
 """
 
 import json
@@ -20,8 +21,26 @@ from ..models import (
     webhook_to_json,
 )
 from ..webhooks import simulate_webhook
+from .auth import require_tenant, require_tenant_or_admin, require_admin
+from twins_local.tenants import generate_tenant_id, generate_tenant_secret, hash_secret
 
 twin_plane_bp = Blueprint("twin_plane", __name__, url_prefix="/_twin")
+
+
+# -- Helpers --
+
+
+def _scope_tenant_id() -> str:
+    """Return the tenant_id to stamp on log entries.
+
+    Admin requests log as "__operator_admin__"; tenant requests log as the
+    authenticated tenant_id. Falls back to "" when auth was not required
+    (e.g. proxy-level operations).
+    """
+    if getattr(g, "is_admin", False):
+        from twins_local.tenants import OPERATOR_ADMIN_TENANT_ID
+        return OPERATOR_ADMIN_TENANT_ID
+    return getattr(g, "tenant_id", "") or ""
 
 
 # -- Public (no auth) --
@@ -40,7 +59,7 @@ def health():
     return jsonify({
         "status": "ok",
         "twin": "livekit",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "upstream": upstream_status,
     })
 
@@ -88,7 +107,7 @@ def settings():
     """Return twin configuration."""
     return jsonify({
         "twin": "livekit",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "base_url": g.base_url,
         "upstream_url": g.upstream_url,
         "api_key": g.livekit_api_key,
@@ -119,10 +138,48 @@ def references():
     })
 
 
+# -- Tenant bootstrap (unauthenticated — secret shown once) --
+
+
+@twin_plane_bp.route("/tenants", methods=["POST"])
+def create_tenant():
+    """Create a new tenant. Returns tenant_id and secret exactly once."""
+    friendly_name = request.json.get("friendly_name", "") if request.is_json else ""
+
+    tenant_id = generate_tenant_id()
+    tenant_secret = generate_tenant_secret()
+    tenant = g.tenants.create_tenant(
+        tenant_id=tenant_id,
+        secret_hash=hash_secret(tenant_secret),
+        friendly_name=friendly_name,
+    )
+
+    g.storage.append_log({
+        "timestamp": now_iso(),
+        "tenant_id": tenant_id,
+        "operation": "twin.tenant.create",
+        "target": tenant_id,
+        "request_summary": f"friendly_name={friendly_name!r}",
+        "response_status": 201,
+        "fault_applied": None,
+        "duration_ms": 0,
+    })
+
+    resp = jsonify({
+        "tenant_id": tenant_id,
+        "tenant_secret": tenant_secret,
+        "friendly_name": tenant["friendly_name"],
+        "created_at": tenant["created_at"],
+    })
+    resp.status_code = 201
+    return resp
+
+
 # -- Account management (contract compliance, single dev account) --
 
 
 @twin_plane_bp.route("/accounts", methods=["POST"])
+@require_tenant
 def create_account():
     """Create account — returns the single dev account (LiveKit is single-tenant)."""
     return jsonify({
@@ -134,6 +191,7 @@ def create_account():
 
 
 @twin_plane_bp.route("/accounts", methods=["GET"])
+@require_tenant_or_admin
 def list_accounts():
     """List accounts — returns the single dev account."""
     return jsonify({
@@ -214,7 +272,7 @@ def list_webhooks():
 
 
 @twin_plane_bp.route("/simulate/webhook", methods=["POST"])
-@require_admin_auth
+@require_tenant_or_admin
 def simulate_webhook_endpoint():
     """Simulate a webhook event without waiting for the real server."""
     data = request.get_json(silent=True) or {}
@@ -233,7 +291,7 @@ def simulate_webhook_endpoint():
 
 
 @twin_plane_bp.route("/faults", methods=["POST"])
-@require_admin_auth
+@require_tenant_or_admin
 def create_fault():
     """Create a fault injection rule."""
     data = request.get_json(silent=True) or {}
@@ -258,6 +316,7 @@ def create_fault():
 
     g.storage.append_log({
         "timestamp": now_iso(),
+        "tenant_id": _scope_tenant_id(),
         "operation": "twin.fault.create",
         "target": target,
         "request_summary": f"action={action}",
@@ -277,7 +336,7 @@ def list_faults():
 
 
 @twin_plane_bp.route("/faults/<fault_id>", methods=["DELETE"])
-@require_admin_auth
+@require_tenant_or_admin
 def delete_fault(fault_id):
     """Delete a fault injection rule."""
     deleted = g.storage.delete_fault(fault_id)
@@ -287,7 +346,7 @@ def delete_fault(fault_id):
 
 
 @twin_plane_bp.route("/faults", methods=["DELETE"])
-@require_admin_auth
+@require_tenant_or_admin
 def clear_faults():
     """Clear all fault injection rules (convenience for test teardown)."""
     g.storage.clear_faults()
@@ -298,11 +357,13 @@ def clear_faults():
 
 
 @twin_plane_bp.route("/logs", methods=["GET"])
+@require_tenant_or_admin
 def list_logs():
-    """List operation logs."""
+    """List operation logs. Admin sees all; tenant sees own."""
     limit = request.args.get("limit", 100, type=int)
     offset = request.args.get("offset", 0, type=int)
-    logs = g.storage.list_logs(limit=limit, offset=offset)
+    tenant_id = None if g.is_admin else g.tenant_id
+    logs = g.storage.list_logs(limit=limit, offset=offset, tenant_id=tenant_id)
     return jsonify({"logs": [log_to_json(entry) for entry in logs], "limit": limit, "offset": offset})
 
 
@@ -310,7 +371,7 @@ def list_logs():
 
 
 @twin_plane_bp.route("/reset", methods=["POST"])
-@require_admin_auth
+@require_tenant_or_admin
 def reset():
     """Clear all twin state and restart livekit-server."""
     g.storage.clear_all()
@@ -321,6 +382,7 @@ def reset():
 
     g.storage.append_log({
         "timestamp": now_iso(),
+        "tenant_id": _scope_tenant_id(),
         "operation": "twin.reset",
         "target": "all",
         "request_summary": "full reset",

@@ -10,11 +10,13 @@ from .webhooks import webhook_bp
 from .ws_proxy import proxy_websocket
 
 
-def create_app(storage, config: dict | None = None) -> Flask:
+def create_app(storage, tenants=None, config: dict | None = None) -> Flask:
     """Create and configure the LiveKit proxy twin Flask application.
 
     Args:
         storage: A LiveKitStorage implementation provided by the host.
+        tenants: A TenantStore implementation. Required for Twin Plane tenant
+            auth; tests may omit for exercises that only hit public paths.
         config: Configuration dict. Supported keys:
             - base_url: The base URL of the twin (e.g., "http://localhost:7880")
             - upstream_url: URL of the real livekit-server (e.g., "http://localhost:7881")
@@ -23,11 +25,13 @@ def create_app(storage, config: dict | None = None) -> Flask:
             - app_webhook_url: URL to forward webhooks to the app
             - admin_token: Bearer token for admin twin plane operations
             - process_manager: Optional LiveKitProcess instance for server lifecycle
+            - is_cloud (bool): Enables the cloud guard that rejects tenant_id="default".
     """
     config = config or {}
 
     app = Flask(__name__)
     app.config["TWIN_STORAGE"] = storage
+    app.config["TWIN_TENANTS"] = tenants
     app.config["TWIN_BASE_URL"] = config.get("base_url", "http://localhost:7880")
     app.config["TWIN_UPSTREAM_URL"] = config.get("upstream_url", "http://localhost:7881")
     app.config["TWIN_LIVEKIT_API_KEY"] = config.get("livekit_api_key", "devkey")
@@ -35,6 +39,7 @@ def create_app(storage, config: dict | None = None) -> Flask:
     app.config["TWIN_APP_WEBHOOK_URL"] = config.get("app_webhook_url", "")
     app.config["TWIN_ADMIN_TOKEN"] = config.get("admin_token", "")
     app.config["TWIN_PROCESS_MANAGER"] = config.get("process_manager")
+    app.config["TWIN_IS_CLOUD"] = bool(config.get("is_cloud", False))
 
     sock = Sock(app)
 
@@ -42,6 +47,7 @@ def create_app(storage, config: dict | None = None) -> Flask:
     def inject_context():
         """Make storage, config, and process manager available to all handlers."""
         g.storage = app.config["TWIN_STORAGE"]
+        g.tenants = app.config["TWIN_TENANTS"]
         g.base_url = app.config["TWIN_BASE_URL"]
         g.upstream_url = app.config["TWIN_UPSTREAM_URL"]
         g.livekit_api_key = app.config["TWIN_LIVEKIT_API_KEY"]
@@ -49,6 +55,7 @@ def create_app(storage, config: dict | None = None) -> Flask:
         g.app_webhook_url = app.config["TWIN_APP_WEBHOOK_URL"]
         g.admin_token = app.config["TWIN_ADMIN_TOKEN"]
         g.process_manager = app.config["TWIN_PROCESS_MANAGER"]
+        g.is_cloud = app.config["TWIN_IS_CLOUD"]
 
     # Register blueprints
     app.register_blueprint(twin_plane_bp)

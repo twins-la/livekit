@@ -117,8 +117,9 @@ class LiveKitStorage(ABC):
         """Append an operation log entry."""
 
     @abstractmethod
-    def list_logs(self, limit: int = 100, offset: int = 0) -> list[dict]:
-        """List operation logs."""
+    def list_logs(self, limit: int = 100, offset: int = 0,
+                  tenant_id: Optional[str] = None) -> list[dict]:
+        """List operation logs, optionally scoped to a tenant."""
 
     # -- Reset --
 

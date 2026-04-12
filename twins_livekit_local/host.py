@@ -9,6 +9,7 @@ import logging
 import os
 
 from twins_livekit.app import create_app
+from twins_local.tenants import SQLiteTenantStore, ensure_default_tenant
 
 from .config import (
     ADMIN_TOKEN,
@@ -43,6 +44,9 @@ def create_local_app():
 
     storage = SQLiteStorage(db_path=DB_PATH)
 
+    tenants = SQLiteTenantStore()  # defaults to ~/.twins/tenants.sqlite3
+    ensure_default_tenant(tenants)
+
     # Start livekit-server if binary path is set
     twin_port = int(os.environ.get("TWIN_PORT", "7880"))
     webhook_sink_url = f"http://127.0.0.1:{twin_port}/_twin/webhook-sink"
@@ -65,6 +69,7 @@ def create_local_app():
 
     app = create_app(
         storage=storage,
+        tenants=tenants,
         config={
             "base_url": BASE_URL,
             "upstream_url": f"http://127.0.0.1:{LIVEKIT_UPSTREAM_PORT}",
@@ -73,6 +78,7 @@ def create_local_app():
             "app_webhook_url": APP_WEBHOOK_URL,
             "admin_token": ADMIN_TOKEN,
             "process_manager": _process_manager,
+            "is_cloud": False,
         },
     )
 

@@ -77,6 +77,7 @@ def log_to_json(entry: dict) -> dict:
     return {
         "id": entry.get("id"),
         "timestamp": entry.get("timestamp", ""),
+        "tenant_id": entry.get("tenant_id", ""),
         "operation": entry.get("operation", ""),
         "target": entry.get("target", ""),
         "request_summary": entry.get("request_summary", ""),

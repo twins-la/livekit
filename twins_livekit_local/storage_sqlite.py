@@ -76,6 +76,7 @@ class SQLiteStorage(LiveKitStorage):
                     CREATE TABLE IF NOT EXISTS logs (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         timestamp TEXT NOT NULL,
+                        tenant_id TEXT NOT NULL DEFAULT '',
                         operation TEXT NOT NULL DEFAULT '',
                         target TEXT NOT NULL DEFAULT '',
                         request_summary TEXT NOT NULL DEFAULT '',
@@ -83,6 +84,7 @@ class SQLiteStorage(LiveKitStorage):
                         fault_applied TEXT,
                         duration_ms INTEGER
                     );
+                    CREATE INDEX IF NOT EXISTS idx_logs_tenant ON logs(tenant_id);
                 """)
                 conn.commit()
             finally:
@@ -404,10 +406,11 @@ class SQLiteStorage(LiveKitStorage):
             conn = self._get_conn()
             try:
                 conn.execute(
-                    "INSERT INTO logs (timestamp, operation, target, request_summary, response_status, fault_applied, duration_ms) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO logs (timestamp, tenant_id, operation, target, request_summary, response_status, fault_applied, duration_ms) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         entry.get("timestamp", ""),
+                        entry.get("tenant_id", ""),
                         entry.get("operation", ""),
                         entry.get("target", ""),
                         entry.get("request_summary", ""),
@@ -420,13 +423,20 @@ class SQLiteStorage(LiveKitStorage):
             finally:
                 conn.close()
 
-    def list_logs(self, limit: int = 100, offset: int = 0) -> list[dict]:
+    def list_logs(self, limit: int = 100, offset: int = 0,
+                  tenant_id: str | None = None) -> list[dict]:
         conn = self._get_conn()
         try:
-            rows = conn.execute(
-                "SELECT * FROM logs ORDER BY id DESC LIMIT ? OFFSET ?",
-                (limit, offset),
-            ).fetchall()
+            if tenant_id is not None:
+                rows = conn.execute(
+                    "SELECT * FROM logs WHERE tenant_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+                    (tenant_id, limit, offset),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM logs ORDER BY id DESC LIMIT ? OFFSET ?",
+                    (limit, offset),
+                ).fetchall()
             return [dict(row) for row in rows]
         finally:
             conn.close()
