@@ -4,12 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "twins-livekit-local"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local hosting framework for the LiveKit proxy twin"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 dependencies = [
-    "twins-livekit>=0.1.0",
+    "twins-livekit>=0.2.0",
+    "twins-local>=0.2.0",
     "gunicorn>=22.0,<24.0",
 ]
 
