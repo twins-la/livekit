@@ -77,12 +77,7 @@ class SQLiteStorage(LiveKitStorage):
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         timestamp TEXT NOT NULL,
                         tenant_id TEXT NOT NULL DEFAULT '',
-                        operation TEXT NOT NULL DEFAULT '',
-                        target TEXT NOT NULL DEFAULT '',
-                        request_summary TEXT NOT NULL DEFAULT '',
-                        response_status INTEGER,
-                        fault_applied TEXT,
-                        duration_ms INTEGER
+                        entry TEXT NOT NULL
                     );
                     CREATE INDEX IF NOT EXISTS idx_logs_tenant ON logs(tenant_id);
                 """)
@@ -402,21 +397,19 @@ class SQLiteStorage(LiveKitStorage):
     # -- Logs --
 
     def append_log(self, entry: dict) -> None:
+        # entry is a normative record (twins-la/LOGGING.md §3.2) built via
+        # twins_local.logs.build_log_record(). Store the full record as a
+        # JSON blob; mirror `timestamp` and `tenant_id` as columns for
+        # indexing / filtering (§3.3 allows envelope fields).
         with self._lock:
             conn = self._get_conn()
             try:
                 conn.execute(
-                    "INSERT INTO logs (timestamp, tenant_id, operation, target, request_summary, response_status, fault_applied, duration_ms) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO logs (timestamp, tenant_id, entry) VALUES (?, ?, ?)",
                     (
                         entry.get("timestamp", ""),
                         entry.get("tenant_id", ""),
-                        entry.get("operation", ""),
-                        entry.get("target", ""),
-                        entry.get("request_summary", ""),
-                        entry.get("response_status"),
-                        entry.get("fault_applied"),
-                        entry.get("duration_ms"),
+                        json.dumps(entry),
                     ),
                 )
                 conn.commit()
@@ -429,15 +422,16 @@ class SQLiteStorage(LiveKitStorage):
         try:
             if tenant_id is not None:
                 rows = conn.execute(
-                    "SELECT * FROM logs WHERE tenant_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+                    "SELECT id, entry FROM logs WHERE tenant_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
                     (tenant_id, limit, offset),
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT * FROM logs ORDER BY id DESC LIMIT ? OFFSET ?",
+                    "SELECT id, entry FROM logs ORDER BY id DESC LIMIT ? OFFSET ?",
                     (limit, offset),
                 ).fetchall()
-            return [dict(row) for row in rows]
+            # Flat normative record with pagination `id` envelope (§3.3).
+            return [{"id": row["id"], **json.loads(row["entry"])} for row in rows]
         finally:
             conn.close()
 

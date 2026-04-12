@@ -12,7 +12,10 @@ import jwt
 import requests
 from flask import Blueprint, Response, g, jsonify, request
 
+from twins_local.logs import ANONYMOUS_TENANT_ID
+
 from .ids import generate_webhook_id
+from .logs import emit
 from .models import now_iso, now_unix_nano
 
 logger = logging.getLogger(__name__)
@@ -133,15 +136,23 @@ def webhook_sink():
 
     if fault:
         if fault["action"] == "drop":
-            g.storage.append_log({
-                "timestamp": now_iso(),
-                "operation": f"webhook:{event_type}",
-                "target": "webhook-sink",
-                "request_summary": f"room={room_name} participant={participant_identity}",
-                "response_status": 200,
-                "fault_applied": fault_applied,
-                "duration_ms": 0,
-            })
+            emit(
+                g.storage,
+                tenant_id=ANONYMOUS_TENANT_ID,
+                plane="runtime",
+                operation="webhook.receive",
+                resource={"type": "webhook", "id": event_type},
+                outcome="failure",
+                reason=f"fault-dropped ({fault_applied})",
+                details={
+                    "target": "webhook-sink",
+                    "room_name": room_name,
+                    "participant_identity": participant_identity,
+                    "response_status": 200,
+                    "fault_applied": fault_applied,
+                    "duration_ms": 0,
+                },
+            )
             return jsonify({"ok": True, "forwarded": False, "fault": "dropped"})
 
         if fault["action"] == "delay":
@@ -156,15 +167,22 @@ def webhook_sink():
         app_webhook_url,
     )
 
-    g.storage.append_log({
-        "timestamp": now_iso(),
-        "operation": f"webhook:{event_type}",
-        "target": "webhook-sink",
-        "request_summary": f"room={room_name} participant={participant_identity}",
-        "response_status": 200,
-        "fault_applied": fault_applied,
-        "duration_ms": 0,
-    })
+    emit(
+        g.storage,
+        tenant_id=ANONYMOUS_TENANT_ID,
+        plane="runtime",
+        operation="webhook.receive",
+        resource={"type": "webhook", "id": event_type},
+        details={
+            "target": "webhook-sink",
+            "room_name": room_name,
+            "participant_identity": participant_identity,
+            "response_status": 200,
+            "fault_applied": fault_applied,
+            "forwarded": forwarded,
+            "duration_ms": 0,
+        },
+    )
 
     return jsonify({"ok": True, "forwarded": forwarded})
 
@@ -246,15 +264,27 @@ def simulate_webhook(event_type: str, room_name: str, participant_identity: str 
         except Exception as e:
             logger.error("Failed to deliver simulated webhook: %s", e)
 
-    g.storage.append_log({
-        "timestamp": now_iso(),
-        "operation": f"simulate:webhook:{event_type}",
-        "target": "simulate",
-        "request_summary": f"room={room_name} participant={participant_identity}",
-        "response_status": 200 if delivered else 502,
-        "fault_applied": None,
-        "duration_ms": 0,
-    })
+    # simulate_webhook is only called from the admin-scoped twin-plane
+    # endpoint; the helper is imported lazily to avoid a circular import
+    # with twin_plane/routes.py (which imports this module).
+    from .twin_plane.routes import _scope_tenant_id
+    emit(
+        g.storage,
+        tenant_id=_scope_tenant_id(),
+        plane="twin",
+        operation="webhook.simulate",
+        resource={"type": "webhook", "id": event_type},
+        outcome="success" if delivered or not app_webhook_url else "failure",
+        reason=None if delivered or not app_webhook_url else "delivery to app webhook URL failed",
+        details={
+            "target": "simulate",
+            "room_name": room_name,
+            "participant_identity": participant_identity,
+            "response_status": 200 if delivered else 502,
+            "fault_applied": None,
+            "duration_ms": 0,
+        },
+    )
 
     return {
         "webhook": {

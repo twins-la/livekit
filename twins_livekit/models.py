@@ -73,15 +73,10 @@ def fault_to_json(f: dict) -> dict:
 
 
 def log_to_json(entry: dict) -> dict:
-    """Convert a stored log entry to JSON."""
-    return {
-        "id": entry.get("id"),
-        "timestamp": entry.get("timestamp", ""),
-        "tenant_id": entry.get("tenant_id", ""),
-        "operation": entry.get("operation", ""),
-        "target": entry.get("target", ""),
-        "request_summary": entry.get("request_summary", ""),
-        "response_status": entry.get("response_status"),
-        "fault_applied": entry.get("fault_applied"),
-        "duration_ms": entry.get("duration_ms"),
-    }
+    """Pass-through for a stored log entry.
+
+    Superseded by twins-la/LOGGING.md §3.2 normative records. ``list_logs``
+    now returns normative records directly; this helper is retained as a
+    no-op for any in-flight external caller.
+    """
+    return entry

@@ -3,6 +3,8 @@
 from flask import Flask, g
 from flask_sock import Sock
 
+from twins_local.logs import install_correlation_id
+
 from .explainer import explainer_bp
 from .proxy import proxy_bp
 from .twin_plane.routes import twin_plane_bp
@@ -42,6 +44,10 @@ def create_app(storage, tenants=None, config: dict | None = None) -> Flask:
     app.config["TWIN_IS_CLOUD"] = bool(config.get("is_cloud", False))
 
     sock = Sock(app)
+
+    # Stamp every request with a correlation_id so emitted log records
+    # share it (twins-la/LOGGING.md §1.2, §3.2).
+    install_correlation_id(app)
 
     @app.before_request
     def inject_context():

@@ -11,10 +11,10 @@ from flask import Blueprint, g, jsonify, request
 
 from ..auth import require_admin_auth
 from ..ids import generate_fault_id
+from ..logs import emit
 from ..models import (
     egress_to_json,
     fault_to_json,
-    log_to_json,
     now_iso,
     participant_to_json,
     room_to_json,
@@ -39,13 +39,15 @@ def _scope_tenant_id() -> str:
     """Return the tenant_id to stamp on log entries.
 
     Admin requests log as "__operator_admin__"; tenant requests log as the
-    authenticated tenant_id. Falls back to "" when auth was not required
-    (e.g. proxy-level operations).
+    authenticated tenant_id. Falls back to ANONYMOUS_TENANT_ID when auth
+    was not required (e.g. proxy-level operations) so the record still
+    carries a non-empty tenant_id per twins-la/LOGGING.md §3.2.
     """
     if getattr(g, "is_admin", False):
         from twins_local.tenants import OPERATOR_ADMIN_TENANT_ID
         return OPERATOR_ADMIN_TENANT_ID
-    return getattr(g, "tenant_id", "") or ""
+    from twins_local.logs import ANONYMOUS_TENANT_ID
+    return getattr(g, "tenant_id", "") or ANONYMOUS_TENANT_ID
 
 
 # -- Public (no auth) --
@@ -163,16 +165,14 @@ def create_tenant():
         friendly_name=friendly_name,
     )
 
-    g.storage.append_log({
-        "timestamp": now_iso(),
-        "tenant_id": tenant_id,
-        "operation": "twin.tenant.create",
-        "target": tenant_id,
-        "request_summary": f"friendly_name={friendly_name!r}",
-        "response_status": 201,
-        "fault_applied": None,
-        "duration_ms": 0,
-    })
+    emit(
+        g.storage,
+        tenant_id=tenant_id,
+        plane="twin",
+        operation="twin.tenant.create",
+        resource={"type": "tenant", "id": tenant_id},
+        details={"friendly_name": friendly_name},
+    )
 
     resp = jsonify({
         "tenant_id": tenant_id,
@@ -323,16 +323,14 @@ def create_fault():
         "config": config,
     })
 
-    g.storage.append_log({
-        "timestamp": now_iso(),
-        "tenant_id": _scope_tenant_id(),
-        "operation": "twin.fault.create",
-        "target": target,
-        "request_summary": f"action={action}",
-        "response_status": 201,
-        "fault_applied": None,
-        "duration_ms": 0,
-    })
+    emit(
+        g.storage,
+        tenant_id=_scope_tenant_id(),
+        plane="twin",
+        operation="twin.fault.create",
+        resource={"type": "fault", "id": fault_id},
+        details={"target": target, "action": action},
+    )
 
     return jsonify({"fault": fault_to_json(fault)}), 201
 
@@ -373,7 +371,9 @@ def list_logs():
     offset = request.args.get("offset", 0, type=int)
     tenant_id = None if g.is_admin else g.tenant_id
     logs = g.storage.list_logs(limit=limit, offset=offset, tenant_id=tenant_id)
-    return jsonify({"logs": [log_to_json(entry) for entry in logs], "limit": limit, "offset": offset})
+    # list_logs returns normative records (twins-la/LOGGING.md §3.2) with
+    # an `id` envelope (§3.3). No per-twin reshaping.
+    return jsonify({"logs": logs, "limit": limit, "offset": offset})
 
 
 # -- Reset --
@@ -389,15 +389,12 @@ def reset():
     if process_mgr:
         process_mgr.restart()
 
-    g.storage.append_log({
-        "timestamp": now_iso(),
-        "tenant_id": _scope_tenant_id(),
-        "operation": "twin.reset",
-        "target": "all",
-        "request_summary": "full reset",
-        "response_status": 204,
-        "fault_applied": None,
-        "duration_ms": 0,
-    })
+    emit(
+        g.storage,
+        tenant_id=_scope_tenant_id(),
+        plane="twin",
+        operation="twin.reset",
+        details={"scope": "all"},
+    )
 
     return "", 204

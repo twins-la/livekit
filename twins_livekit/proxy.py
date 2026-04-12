@@ -11,8 +11,11 @@ import time
 import requests
 from flask import Blueprint, Response, g, request
 
+from twins_local.logs import ANONYMOUS_TENANT_ID
+
 from .errors import internal_error, twirp_error, unavailable
 from .ids import generate_egress_id, generate_room_sid
+from .logs import emit
 from .models import now_iso, now_unix_nano
 
 logger = logging.getLogger(__name__)
@@ -119,15 +122,21 @@ def _handle_intercepted(path: str, operation: str):
         error_resp = _apply_fault(fault)
         if error_resp is not None:
             duration_ms = int((time.time() - start) * 1000)
-            g.storage.append_log({
-                "timestamp": now_iso(),
-                "operation": operation,
-                "target": path,
-                "request_summary": _summarize_request(),
-                "response_status": error_resp.status_code,
-                "fault_applied": fault_applied,
-                "duration_ms": duration_ms,
-            })
+            emit(
+                g.storage,
+                tenant_id=ANONYMOUS_TENANT_ID,
+                plane="data",
+                operation=f"proxy.{operation}",
+                outcome="failure",
+                reason=f"fault-injected ({fault_applied})",
+                details={
+                    "target": path,
+                    "request_summary": _summarize_request(),
+                    "response_status": error_resp.status_code,
+                    "fault_applied": fault_applied,
+                    "duration_ms": duration_ms,
+                },
+            )
             return error_resp
 
     # Log the request
@@ -144,15 +153,23 @@ def _handle_intercepted(path: str, operation: str):
         resp_body = _try_parse_json(resp.get_data())
         _update_state(operation, req_body, resp_body)
 
-    g.storage.append_log({
-        "timestamp": now_iso(),
-        "operation": operation,
-        "target": path,
-        "request_summary": req_summary,
-        "response_status": resp.status_code if isinstance(resp, Response) else 500,
-        "fault_applied": fault_applied,
-        "duration_ms": duration_ms,
-    })
+    status = resp.status_code if isinstance(resp, Response) else 500
+    is_success = 200 <= status < 400
+    emit(
+        g.storage,
+        tenant_id=ANONYMOUS_TENANT_ID,
+        plane="data",
+        operation=f"proxy.{operation}",
+        outcome="success" if is_success else "failure",
+        reason=None if is_success else f"upstream returned {status}",
+        details={
+            "target": path,
+            "request_summary": req_summary,
+            "response_status": status,
+            "fault_applied": fault_applied,
+            "duration_ms": duration_ms,
+        },
+    )
 
     return resp
 

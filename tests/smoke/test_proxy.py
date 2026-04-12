@@ -53,8 +53,9 @@ class TestProxyFaultInjection:
         # Verify it was logged
         logs = storage.list_logs()
         assert len(logs) == 1
-        assert logs[0]["operation"] == "CreateRoom"
-        assert logs[0]["fault_applied"] == "FT_1"
+        assert logs[0]["operation"] == "proxy.CreateRoom"
+        assert logs[0]["details"]["fault_applied"] == "FT_1"
+        assert logs[0]["outcome"] == "failure"
 
     @responses.activate
     def test_proxy_forwards_to_upstream(self, client, storage):
@@ -82,7 +83,8 @@ class TestProxyFaultInjection:
         # Verify it was logged
         logs = storage.list_logs()
         assert len(logs) == 1
-        assert logs[0]["response_status"] == 200
+        assert logs[0]["details"]["response_status"] == 200
+        assert logs[0]["outcome"] == "success"
 
     @responses.activate
     def test_proxy_handles_upstream_down(self, client, storage):

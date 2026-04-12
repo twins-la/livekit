@@ -11,6 +11,9 @@ import time
 import websocket as ws_client
 from flask import g
 
+from twins_local.logs import ANONYMOUS_TENANT_ID
+
+from .logs import emit
 from .models import now_iso
 
 logger = logging.getLogger(__name__)
@@ -34,15 +37,21 @@ def proxy_websocket(ws, upstream_url: str, storage):
     faults = storage.list_faults()
     for f in faults:
         if f["target"] == "ws:connect" and f["action"] == "error":
-            storage.append_log({
-                "timestamp": now_iso(),
-                "operation": "ws:connect",
-                "target": "/rtc",
-                "request_summary": "rejected by fault rule",
-                "response_status": 503,
-                "fault_applied": f["id"],
-                "duration_ms": 0,
-            })
+            emit(
+                storage,
+                tenant_id=ANONYMOUS_TENANT_ID,
+                plane="data",
+                operation="proxy.ws.connect",
+                outcome="failure",
+                reason=f"fault-injected ({f['id']})",
+                details={
+                    "target": "/rtc",
+                    "request_summary": "rejected by fault rule",
+                    "response_status": 503,
+                    "fault_applied": f["id"],
+                    "duration_ms": 0,
+                },
+            )
             ws.close(1013, "Service unavailable (fault injected)")
             return
 
@@ -51,30 +60,40 @@ def proxy_websocket(ws, upstream_url: str, storage):
     upstream_closed = threading.Event()
     client_closed = threading.Event()
 
-    storage.append_log({
-        "timestamp": now_iso(),
-        "operation": "ws:connect",
-        "target": "/rtc",
-        "request_summary": f"upstream={_redact_url(upstream_url)}",
-        "response_status": 101,
-        "fault_applied": None,
-        "duration_ms": 0,
-    })
+    emit(
+        storage,
+        tenant_id=ANONYMOUS_TENANT_ID,
+        plane="data",
+        operation="proxy.ws.connect",
+        details={
+            "target": "/rtc",
+            "request_summary": f"upstream={_redact_url(upstream_url)}",
+            "response_status": 101,
+            "fault_applied": None,
+            "duration_ms": 0,
+        },
+    )
 
     try:
         upstream = ws_client.WebSocket()
         upstream.connect(upstream_url, timeout=10)
     except Exception as e:
         logger.error("Failed to connect to upstream WebSocket: %s", e)
-        storage.append_log({
-            "timestamp": now_iso(),
-            "operation": "ws:error",
-            "target": "/rtc",
-            "request_summary": f"upstream connect failed: {e}",
-            "response_status": 502,
-            "fault_applied": None,
-            "duration_ms": int((time.time() - connect_time) * 1000),
-        })
+        emit(
+            storage,
+            tenant_id=ANONYMOUS_TENANT_ID,
+            plane="data",
+            operation="proxy.ws.error",
+            outcome="failure",
+            reason=f"upstream connect failed: {e}",
+            details={
+                "target": "/rtc",
+                "request_summary": f"upstream connect failed: {e}",
+                "response_status": 502,
+                "fault_applied": None,
+                "duration_ms": int((time.time() - connect_time) * 1000),
+            },
+        )
         ws.close(1014, "Upstream unavailable")
         return
 
@@ -131,14 +150,18 @@ def proxy_websocket(ws, upstream_url: str, storage):
     except Exception:
         pass
 
-    storage.append_log({
-        "timestamp": now_iso(),
-        "operation": "ws:disconnect",
-        "target": "/rtc",
-        "request_summary": f"duration={duration_ms}ms",
-        "response_status": None,
-        "fault_applied": None,
-        "duration_ms": duration_ms,
-    })
+    emit(
+        storage,
+        tenant_id=ANONYMOUS_TENANT_ID,
+        plane="data",
+        operation="proxy.ws.disconnect",
+        details={
+            "target": "/rtc",
+            "request_summary": f"duration={duration_ms}ms",
+            "response_status": None,
+            "fault_applied": None,
+            "duration_ms": duration_ms,
+        },
+    )
 
     logger.info("WebSocket proxy session ended after %dms", duration_ms)
