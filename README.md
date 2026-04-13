@@ -4,7 +4,7 @@ A proxy twin that wraps [livekit-server](https://github.com/livekit/livekit) for
 
 ## What This Is
 
-A Python package that proxies LiveKit's HTTP/gRPC and WebSocket APIs through an instrumentation layer. Unlike the Twilio twin (full emulation), this is a **proxy twin** — it runs a real `livekit-server --dev` process and intercepts all traffic to add observability, fault injection, and test control.
+A Python package that proxies LiveKit's HTTP/gRPC and WebSocket APIs through an instrumentation layer. This is a **proxy twin**: it runs a real `livekit-server --dev` process and intercepts all traffic to add observability, fault injection, and test control.
 
 Existing LiveKit SDK code can be pointed at this twin with no changes. The twin forwards requests to the real server, logs everything, and lets you inject faults and simulate events through the Twin Plane.
 
@@ -33,23 +33,18 @@ Twin (port 7880)
 
 ## Usage
 
-This package is local only — no cloud deployment yet.
+This package is not run directly. It is loaded by a host:
 
-```bash
-pip install twins-livekit
-```
+- **Local**: `twins-livekit-local` (sibling package under `twins_livekit_local/`) — run locally via gunicorn or `python -m twins_livekit_local`
+- **Cloud**: not deployed yet
 
-The twin requires a `livekit-server` binary. In dev mode, it manages the server process automatically.
+The twin requires a `livekit-server` binary on the host. In dev mode it manages the server process automatically.
 
 ### Quick Start
 
-```python
-from twins_livekit_local.storage_sqlite import SQLiteStorage
-from twins_livekit.app import create_app
-
-storage = SQLiteStorage("livekit_twin.db")
-app = create_app(storage=storage)
-app.run(port=7880)
+```bash
+pip install -e . ./twins_livekit_local/
+python -m twins_livekit_local
 ```
 
 Then use the LiveKit SDK as normal:
@@ -94,7 +89,3 @@ LIVEKIT_API_SECRET=secret
 
 LIVEKIT_APP_WEBHOOK_URL=http://localhost:8000/api/livekit/webhook
 ```
-
-## Version
-
-0.1.0
