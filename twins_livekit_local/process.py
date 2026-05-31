@@ -51,7 +51,12 @@ class LiveKitProcess:
         if self._webhook_url:
             cmd.extend(["--webhook-url", self._webhook_url])
 
-        logger.info("Starting livekit-server: %s", " ".join(cmd))
+        # Redact the API key/secret before logging so credentials never land
+        # in application logs (they remain visible only in `ps` for the child).
+        log_cmd = cmd[:]
+        keys_idx = log_cmd.index("--keys")
+        log_cmd[keys_idx + 1] = "***:***"
+        logger.info("Starting livekit-server: %s", " ".join(log_cmd))
 
         self._process = subprocess.Popen(
             cmd,

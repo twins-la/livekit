@@ -154,19 +154,41 @@ class TestReadEndpointsNoAuth:
     def test_settings_no_auth(self, admin_client):
         assert admin_client.get("/_twin/settings").status_code == 200
 
-    def test_rooms_no_auth(self, admin_client):
-        assert admin_client.get("/_twin/rooms").status_code == 200
-
-    def test_faults_list_no_auth(self, admin_client):
-        assert admin_client.get("/_twin/faults").status_code == 200
-
-    def test_webhooks_no_auth(self, admin_client):
-        assert admin_client.get("/_twin/webhooks").status_code == 200
-
     def test_tenants_bootstrap_no_auth(self, admin_client):
         """POST /_twin/tenants is the unauthenticated bootstrap."""
         resp = admin_client.post("/_twin/tenants", json={})
         assert resp.status_code == 201
+
+
+class TestReadEndpointsRequireAuth:
+    """State-inspection reads must require tenant OR admin auth (TWLK-003).
+
+    These endpoints leak room names, participant identities, egress IDs, and
+    webhook payloads when open; each must reject an unauthenticated caller.
+    """
+
+    READ_ENDPOINTS = [
+        "/_twin/rooms",
+        "/_twin/rooms/some-room",
+        "/_twin/rooms/some-room/participants",
+        "/_twin/egresses",
+        "/_twin/egresses/some-egress",
+        "/_twin/webhooks",
+        "/_twin/faults",
+    ]
+
+    @pytest.mark.parametrize("path", READ_ENDPOINTS)
+    def test_read_endpoint_requires_auth(self, admin_client, path):
+        assert admin_client.get(path).status_code == 401
+
+    def test_list_rooms_with_admin_auth(self, admin_client, admin_headers):
+        assert admin_client.get("/_twin/rooms", headers=admin_headers).status_code == 200
+
+    def test_list_rooms_with_tenant_auth(self, admin_client, tenant_a_headers):
+        assert admin_client.get("/_twin/rooms", headers=tenant_a_headers).status_code == 200
+
+    def test_list_faults_with_admin_auth(self, admin_client, admin_headers):
+        assert admin_client.get("/_twin/faults", headers=admin_headers).status_code == 200
 
 
 class TestLogScoping:

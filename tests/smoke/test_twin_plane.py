@@ -81,47 +81,47 @@ class TestAccounts:
 
 
 class TestRoomInspection:
-    def test_list_rooms_empty(self, client):
-        resp = client.get("/_twin/rooms")
+    def test_list_rooms_empty(self, client, tenant_headers):
+        resp = client.get("/_twin/rooms", headers=tenant_headers)
         assert resp.status_code == 200
         assert resp.get_json()["rooms"] == []
 
-    def test_list_rooms_after_create(self, client, storage):
+    def test_list_rooms_after_create(self, client, storage, tenant_headers):
         storage.create_room({"name": "sc-123", "max_participants": 2})
-        resp = client.get("/_twin/rooms")
+        resp = client.get("/_twin/rooms", headers=tenant_headers)
         data = resp.get_json()
         assert len(data["rooms"]) == 1
         assert data["rooms"][0]["name"] == "sc-123"
 
-    def test_get_room_with_participants(self, client, storage):
+    def test_get_room_with_participants(self, client, storage, tenant_headers):
         storage.create_room({"name": "sc-123"})
         storage.add_participant("sc-123", {"identity": "alice"})
-        resp = client.get("/_twin/rooms/sc-123")
+        resp = client.get("/_twin/rooms/sc-123", headers=tenant_headers)
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["name"] == "sc-123"
         assert len(data["participants"]) == 1
         assert data["participants"][0]["identity"] == "alice"
 
-    def test_get_room_not_found(self, client):
-        resp = client.get("/_twin/rooms/nonexistent")
+    def test_get_room_not_found(self, client, tenant_headers):
+        resp = client.get("/_twin/rooms/nonexistent", headers=tenant_headers)
         assert resp.status_code == 404
 
 
 class TestEgressInspection:
-    def test_list_egresses_empty(self, client):
-        resp = client.get("/_twin/egresses")
+    def test_list_egresses_empty(self, client, tenant_headers):
+        resp = client.get("/_twin/egresses", headers=tenant_headers)
         assert resp.status_code == 200
         assert resp.get_json()["egresses"] == []
 
-    def test_get_egress_not_found(self, client):
-        resp = client.get("/_twin/egresses/nonexistent")
+    def test_get_egress_not_found(self, client, tenant_headers):
+        resp = client.get("/_twin/egresses/nonexistent", headers=tenant_headers)
         assert resp.status_code == 404
 
 
 class TestWebhookInspection:
-    def test_list_webhooks_empty(self, client):
-        resp = client.get("/_twin/webhooks")
+    def test_list_webhooks_empty(self, client, tenant_headers):
+        resp = client.get("/_twin/webhooks", headers=tenant_headers)
         assert resp.status_code == 200
         assert resp.get_json()["webhooks"] == []
 
@@ -148,7 +148,7 @@ class TestFaultInjection:
     def test_list_faults(self, client, tenant_headers):
         client.post("/_twin/faults", json={"target": "CreateRoom", "action": "error"},
                      headers=tenant_headers)
-        resp = client.get("/_twin/faults")
+        resp = client.get("/_twin/faults", headers=tenant_headers)
         assert resp.status_code == 200
         assert len(resp.get_json()["faults"]) == 1
 
@@ -160,7 +160,7 @@ class TestFaultInjection:
         resp = client.delete(f"/_twin/faults/{fault_id}", headers=tenant_headers)
         assert resp.status_code == 204
 
-        resp = client.get("/_twin/faults")
+        resp = client.get("/_twin/faults", headers=tenant_headers)
         assert len(resp.get_json()["faults"]) == 0
 
     def test_clear_all_faults(self, client, tenant_headers):
@@ -172,7 +172,7 @@ class TestFaultInjection:
         resp = client.delete("/_twin/faults", headers=tenant_headers)
         assert resp.status_code == 204
 
-        resp = client.get("/_twin/faults")
+        resp = client.get("/_twin/faults", headers=tenant_headers)
         assert len(resp.get_json()["faults"]) == 0
 
     def test_create_fault_invalid_action(self, client, tenant_headers):

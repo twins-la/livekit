@@ -217,6 +217,7 @@ def list_accounts():
 
 
 @twin_plane_bp.route("/rooms", methods=["GET"])
+@require_tenant_or_admin
 def list_rooms():
     """List rooms tracked by the twin."""
     rooms = g.storage.list_rooms()
@@ -224,6 +225,7 @@ def list_rooms():
 
 
 @twin_plane_bp.route("/rooms/<name>", methods=["GET"])
+@require_tenant_or_admin
 def get_room(name):
     """Get a room by name, including participants."""
     room = g.storage.get_room(name)
@@ -237,6 +239,7 @@ def get_room(name):
 
 
 @twin_plane_bp.route("/rooms/<name>/participants", methods=["GET"])
+@require_tenant_or_admin
 def list_room_participants(name):
     """List participants in a room."""
     participants = g.storage.list_participants(name)
@@ -244,6 +247,7 @@ def list_room_participants(name):
 
 
 @twin_plane_bp.route("/egresses", methods=["GET"])
+@require_tenant_or_admin
 def list_egresses():
     """List egresses, optionally filtered by room."""
     room_name = request.args.get("room_name")
@@ -252,6 +256,7 @@ def list_egresses():
 
 
 @twin_plane_bp.route("/egresses/<egress_id>", methods=["GET"])
+@require_tenant_or_admin
 def get_egress(egress_id):
     """Get an egress by ID."""
     egress = g.storage.get_egress(egress_id)
@@ -264,6 +269,7 @@ def get_egress(egress_id):
 
 
 @twin_plane_bp.route("/webhooks", methods=["GET"])
+@require_tenant_or_admin
 def list_webhooks():
     """List recorded webhook events."""
     room_name = request.args.get("room_name")
@@ -336,6 +342,7 @@ def create_fault():
 
 
 @twin_plane_bp.route("/faults", methods=["GET"])
+@require_tenant_or_admin
 def list_faults():
     """List all fault injection rules."""
     faults = g.storage.list_faults()
