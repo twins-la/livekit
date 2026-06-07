@@ -89,3 +89,7 @@ LIVEKIT_API_SECRET=secret
 
 LIVEKIT_APP_WEBHOOK_URL=http://localhost:8000/api/livekit/webhook
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
