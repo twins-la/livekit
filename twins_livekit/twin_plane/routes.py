@@ -111,13 +111,12 @@ def scenarios():
 
 @twin_plane_bp.route("/settings", methods=["GET"])
 def settings():
-    """Return twin configuration."""
+    """Return twin configuration (public; no credentials)."""
     return jsonify({
         "twin": "livekit",
         "version": "0.2.0",
         "base_url": g.base_url,
         "upstream_url": g.upstream_url,
-        "api_key": g.livekit_api_key,
     })
 
 

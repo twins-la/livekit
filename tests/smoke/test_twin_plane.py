@@ -1,5 +1,7 @@
 """Tests for Twin Plane management endpoints."""
 
+import json
+
 
 class TestHealth:
     def test_health_returns_ok(self, client):
@@ -30,8 +32,15 @@ class TestSettings:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["twin"] == "livekit"
-        assert data["api_key"] == "devkey"
+        assert "version" in data
+        assert "base_url" in data
         assert "upstream_url" in data
+
+    def test_settings_omits_credentials(self, client):
+        data = client.get("/_twin/settings").get_json()
+        assert "api_key" not in data
+        assert "api_secret" not in data
+        assert "devkey" not in json.dumps(data)
 
 
 class TestReferences:
